@@ -2,22 +2,23 @@
 
 import BreadcrumbCart from "@/components/cart-page/BreadcrumbCart";
 import ProductCard from "@/components/cart-page/ProductCard";
+import CouponWidget from "@/components/cart-page/CouponWidget";
 import { Button } from "@/components/ui/button";
-import InputGroup from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 import { integralCF } from "@/styles/fonts";
 import { FaArrowRight } from "react-icons/fa6";
-import { MdOutlineLocalOffer } from "react-icons/md";
 import { TbBasketExclamation } from "react-icons/tb";
 import React from "react";
 import { RootState } from "@/lib/store";
 import { useAppSelector } from "@/lib/hooks/redux";
+import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 
 export default function CartPage() {
   const { cart, totalPrice, adjustedTotalPrice } = useAppSelector(
     (state: RootState) => state.carts
   );
+  const { showToast } = useToast();
 
   return (
     <main className="pb-20">
@@ -79,27 +80,19 @@ export default function CartPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex space-x-3">
-                  <InputGroup className="bg-[#F0F0F0]">
-                    <InputGroup.Text>
-                      <MdOutlineLocalOffer className="text-black/40 text-2xl" />
-                    </InputGroup.Text>
-                    <InputGroup.Input
-                      type="text"
-                      name="code"
-                      placeholder="Add promo code"
-                      className="bg-transparent placeholder:text-black/40"
-                    />
-                  </InputGroup>
-                  <Button
-                    type="button"
-                    className="bg-black rounded-full w-full max-w-[119px] h-[48px]"
-                  >
-                    Apply
-                  </Button>
+                <div className="space-y-3">
+                  <CouponWidget cartTotal={adjustedTotalPrice} />
                 </div>
                 <Button
                   type="button"
+                  onClick={() =>
+                    showToast({
+                      variant: "info",
+                      title: "Demo checkout",
+                      description:
+                        "This project's backend is an AI shopping-assistant engine and doesn't include payments/order processing — checkout isn't wired to a real payment flow.",
+                    })
+                  }
                   className="text-sm md:text-base font-medium bg-black rounded-full w-full py-4 h-[54px] md:h-[60px] group"
                 >
                   Go to Checkout{" "}

@@ -5,6 +5,7 @@ import { Provider } from "react-redux";
 import { makeStore } from "../lib/store";
 import { PersistGate } from "redux-persist/integration/react";
 import SpinnerbLoader from "@/components/ui/SpinnerbLoader";
+import { ToastProvider } from "@/components/ui/Toast";
 
 type Props = {
   children: React.ReactNode;
@@ -23,7 +24,7 @@ const Providers = ({ children }: Props) => {
         }
         persistor={persistor}
       >
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </PersistGate>
     </Provider>
   );

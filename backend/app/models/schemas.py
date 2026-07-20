@@ -168,6 +168,17 @@ class MemoryResponse(BaseModel):
     data: dict[str, Any]
 
 
+# ---------- /products ----------
+
+class ProductListResponse(BaseModel):
+    items: list[Product]
+    total: int
+    page: int
+    page_size: int
+    categories: list[str] = Field(default_factory=list)
+    brands: list[str] = Field(default_factory=list)
+
+
 # ---------- /agent/debug ----------
 
 class DebugRequest(BaseModel):

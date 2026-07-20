@@ -20,6 +20,7 @@ from app.api import (
     routes_health,
     routes_memory,
     routes_optimize,
+    routes_products,
     routes_recommend,
     routes_search,
     routes_wardrobe,
@@ -55,6 +56,7 @@ app.add_middleware(
 
 
 app.include_router(routes_health.router)
+app.include_router(routes_products.router)
 app.include_router(routes_chat.router)
 app.include_router(routes_search.router)
 app.include_router(routes_optimize.router)

@@ -6,6 +6,7 @@ import TopNavbar from "@/components/layout/Navbar/TopNavbar";
 import Footer from "@/components/layout/Footer";
 import HolyLoader from "holy-loader";
 import Providers from "./providers";
+import ChatWidget from "@/components/assistant/ChatWidget";
 
 export const metadata: Metadata = {
   title: "TEEZ.LO",
@@ -29,6 +30,7 @@ export default function RootLayout({
         <Providers>
           <TopNavbar />
           {children}
+          <ChatWidget />
         </Providers>
         <Footer />
       </body>

@@ -8,7 +8,11 @@ import ColorSelection from "./ColorSelection";
 import SizeSelection from "./SizeSelection";
 import AddToCardSection from "./AddToCardSection";
 
-const Header = ({ data }: { data: Product }) => {
+const Header = ({
+  data,
+}: {
+  data: Product & { description?: string };
+}) => {
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -77,8 +81,8 @@ const Header = ({ data }: { data: Product }) => {
             )}
           </div>
           <p className="text-sm sm:text-base text-black/60 mb-5">
-            This graphic t-shirt which is perfect for any occasion. Crafted from
-            a soft and breathable fabric, it offers superior comfort and style.
+            {data.description ||
+              "This graphic t-shirt which is perfect for any occasion. Crafted from a soft and breathable fabric, it offers superior comfort and style."}
           </p>
           <hr className="h-[1px] border-t-black/10 mb-5" />
           <ColorSelection />

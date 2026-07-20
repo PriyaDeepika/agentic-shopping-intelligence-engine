@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import AddToCartBtn from "./AddToCartBtn";
 import { Product } from "@/types/product.types";
 
-const AddToCardSection = ({ data }: { data: Product }) => {
+const AddToCardSection = ({ data }: { data: Product & { backendId?: string } }) => {
   const [quantity, setQuantity] = useState<number>(1);
 
   return (
