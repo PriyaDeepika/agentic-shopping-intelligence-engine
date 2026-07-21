@@ -1,4 +1,5 @@
-// Mirrors app/models/product.py -> Product
+// Mirrors backend/app/models/product.py Product exactly — do not change field
+// names here without a matching backend change (there is none planned).
 export interface BackendProduct {
   id: string;
   name: string;
@@ -51,20 +52,6 @@ export interface CartSummary {
   over_budget: boolean;
 }
 
-export interface ProductExplanation {
-  product_id: string;
-  reasons: string[];
-}
-
-export interface ChatResponse {
-  session_id: string;
-  reply: string;
-  cart: CartSummary;
-  explanations: ProductExplanation[];
-  agent_timeline: AgentTrace[];
-  timeline_text: string;
-}
-
 export interface CartActionResponse {
   cart: CartSummary;
   agent_trace: AgentTrace;
@@ -83,11 +70,38 @@ export interface CouponResponse {
   agent_trace: AgentTrace;
 }
 
+// ---------- AI assistant (chat/recommend/wardrobe/optimize) ----------
+// Mirrors backend/app/models/schemas.py exactly.
+
+export interface ExplanationItem {
+  product_id: string;
+  reasons: string[];
+}
+
+export interface ChatResponse {
+  session_id: string;
+  reply: string;
+  cart: CartSummary;
+  explanations: ExplanationItem[];
+  agent_timeline: AgentTrace[];
+  timeline_text: string;
+}
+
+export interface SearchResponse {
+  products: BackendProduct[];
+  agent_trace: AgentTrace;
+}
+
+export interface OptimizeResponse {
+  cart: CartSummary;
+  agent_trace: AgentTrace;
+}
+
 export interface WardrobeItemInput {
   name: string;
   category: string;
-  color: string;
-  tags: string[];
+  color?: string;
+  tags?: string[];
 }
 
 export interface WardrobeResponse {
@@ -97,9 +111,9 @@ export interface WardrobeResponse {
   agent_trace: AgentTrace;
 }
 
-export interface OptimizeResponse {
+export interface RecommendResponse {
   cart: CartSummary;
-  agent_trace: AgentTrace;
+  explanations: ExplanationItem[];
+  agent_timeline: AgentTrace[];
+  timeline_text: string;
 }
-
-export interface RecommendResponse extends ChatResponse {}

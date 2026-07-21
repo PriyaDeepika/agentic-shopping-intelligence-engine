@@ -1,22 +1,29 @@
 import { apiUrl } from "./config";
 import type {
+  BackendProduct,
   CartActionResponse,
   ChatResponse,
   CouponResponse,
   OptimizeResponse,
   ProductListResponse,
   RecommendResponse,
+  SearchResponse,
   WardrobeItemInput,
   WardrobeResponse,
-  BackendProduct,
 } from "./types";
+
+// Lets callers (chiefly the chat UI) show an accurate message instead of one
+// generic "couldn't reach the backend" string for every kind of failure.
+export type ApiErrorKind = "network" | "timeout" | "not_found" | "server" | "client";
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  kind: ApiErrorKind;
+  constructor(message: string, status: number, kind: ApiErrorKind) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.kind = kind;
   }
 }
 
@@ -33,23 +40,18 @@ async function request<T>(
     res = await fetch(apiUrl(path), {
       ...rest,
       signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...(rest.headers || {}),
-      },
+      headers: { "Content-Type": "application/json", ...(rest.headers || {}) },
       cache: "no-store",
     });
   } catch (err) {
     clearTimeout(timer);
     if ((err as Error).name === "AbortError") {
-      throw new ApiError(
-        "The AI backend took too long to respond. Please try again.",
-        408
-      );
+      throw new ApiError("The backend took too long to respond.", 408, "timeout");
     }
     throw new ApiError(
-      "Could not reach the backend. Is it running at the configured NEXT_PUBLIC_API_URL?",
-      0
+      "Could not reach the backend. Is it running at NEXT_PUBLIC_API_URL?",
+      0,
+      "network"
     );
   }
   clearTimeout(timer);
@@ -60,23 +62,17 @@ async function request<T>(
       const body = await res.json();
       detail = body?.detail ? JSON.stringify(body.detail) : detail;
     } catch {
-      // ignore parse errors, keep statusText
+      /* keep statusText */
     }
-    throw new ApiError(detail || `Request failed (${res.status})`, res.status);
+    const kind: ApiErrorKind =
+      res.status === 404 ? "not_found" : res.status >= 500 ? "server" : "client";
+    throw new ApiError(detail || `Request failed (${res.status})`, res.status, kind);
   }
-
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
-// ---------- Health ----------
-export function getHealth() {
-  return request<{ status: string; service: string; environment: string; llm_provider: string }>(
-    "/health"
-  );
-}
-
-// ---------- Catalog ----------
+// ---------- Catalog (GET /products, GET /products/{id}) ----------
 export interface ListProductsParams {
   q?: string;
   category?: string;
@@ -102,26 +98,52 @@ export function getProduct(id: string) {
   return request<BackendProduct>(`/products/${encodeURIComponent(id)}`);
 }
 
-// ---------- Semantic search ----------
-export interface SearchParams {
+// ---------- Semantic search (POST /search) ----------
+// NOTE: previously typed the response as `{ results: BackendProduct[] }`,
+// but backend/app/models/schemas.py -> SearchResponse actually returns
+// `{ products: [...], agent_trace: {...} }` — this returned `undefined`
+// products at runtime. Fixed to match the real shape.
+export function searchProducts(payload: {
   query: string;
   top_k?: number;
   filters?: Record<string, unknown>;
-}
-
-export function searchProducts(params: SearchParams) {
-  return request<{ results: BackendProduct[] }>("/search", {
+}) {
+  return request<SearchResponse>("/search", {
     method: "POST",
-    body: JSON.stringify(params),
+    body: JSON.stringify(payload),
   });
 }
 
-// ---------- Chat (multi-agent orchestrator) ----------
-export function sendChatMessage(payload: {
+// ---------- Cart (POST /cart) ----------
+// NOTE: previously missing `user_id` (the backend's CartActionRequest
+// requires it to load the right session/memory) and typed `action` as
+// "add" | "remove" | "update_quantity" | "clear", which doesn't match what
+// the backend's CartAgent delta path actually handles
+// ("swap"/"increase_quantity"/"decrease_quantity" instead).
+export function cartAction(payload: {
   user_id: string;
   session_id: string;
-  message: string;
+  action: "add" | "remove" | "swap" | "increase_quantity" | "decrease_quantity";
+  product_id?: string;
+  replacement_product_id?: string;
+  quantity?: number;
 }) {
+  return request<CartActionResponse>("/cart", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------- Coupons (POST /coupon) ----------
+export function findCoupons(payload: { cart_total: number; brand_ids?: string[] }) {
+  return request<CouponResponse>("/coupon", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------- AI Assistant (POST /chat) ----------
+export function chat(payload: { user_id: string; session_id: string; message: string }) {
   return request<ChatResponse>("/chat", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -129,8 +151,8 @@ export function sendChatMessage(payload: {
   });
 }
 
-// ---------- Recommend ----------
-export function getRecommendation(payload: {
+// ---------- AI Recommend (POST /recommend) ----------
+export function recommend(payload: {
   user_id: string;
   session_id: string;
   goal: string;
@@ -144,29 +166,7 @@ export function getRecommendation(payload: {
   });
 }
 
-// ---------- Cart ----------
-export function cartAction(payload: {
-  user_id: string;
-  session_id: string;
-  action: "add" | "remove" | "update_quantity" | "clear";
-  product_id?: string;
-  quantity?: number;
-}) {
-  return request<CartActionResponse>("/cart", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-// ---------- Coupon ----------
-export function findCoupons(payload: { cart_total: number; brand_ids?: string[] }) {
-  return request<CouponResponse>("/coupon", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-// ---------- Wardrobe ----------
+// ---------- AI Wardrobe (POST /wardrobe) ----------
 export function submitWardrobe(payload: { user_id: string; items: WardrobeItemInput[] }) {
   return request<WardrobeResponse>("/wardrobe", {
     method: "POST",
@@ -174,8 +174,8 @@ export function submitWardrobe(payload: { user_id: string; items: WardrobeItemIn
   });
 }
 
-// ---------- Budget optimizer ----------
-export function optimizeBudget(payload: {
+// ---------- AI Budget optimizer (POST /optimize) ----------
+export function optimizeCart(payload: {
   user_id: string;
   session_id: string;
   budget: number;
@@ -185,4 +185,11 @@ export function optimizeBudget(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// ---------- Health ----------
+export function getHealth() {
+  return request<{ status: string; service: string; environment: string }>(
+    "/health"
+  );
 }

@@ -5,6 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const compareArrays = (a: any[], b: any[]) => {
-  return a.toString() === b.toString();
-};
+export function formatINR(n: number): string {
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}

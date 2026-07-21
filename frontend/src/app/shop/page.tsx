@@ -1,105 +1,165 @@
-import { Suspense } from "react";
-import BreadcrumbShop from "@/components/shop-page/BreadcrumbShop";
-import MobileFilters from "@/components/shop-page/filters/MobileFilters";
-import Filters from "@/components/shop-page/filters";
-import { FiSliders } from "react-icons/fi";
-import ProductCard from "@/components/common/ProductCard";
-import ProductGridSkeleton from "@/components/common/ProductGridSkeleton";
-import BackendOfflineBanner from "@/components/common/BackendOfflineBanner";
-import ShopSearchBar from "@/components/shop-page/ShopSearchBar";
-import ShopSortSelect from "@/components/shop-page/ShopSortSelect";
-import ShopPagination from "@/components/shop-page/ShopPagination";
-import { getShopProducts, ShopQuery } from "@/lib/api/products";
+"use client";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { SlidersHorizontal, Sparkles, X } from "lucide-react";
+import Filters from "@/components/shop/Filters";
+import { ProductGrid, ProductGridSkeleton } from "@/components/product/ProductGrid";
+import OfflineBanner from "@/components/common/OfflineBanner";
+import { askAI } from "@/components/ai/FloatingAssistant";
+import { deriveFacets, filterCatalog, safeGetCatalog, type FilterState } from "@/lib/catalog";
+import type { UIProduct } from "@/types/product";
 
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 20;
 
-async function ShopResults({ searchParams }: { searchParams: ShopQuery }) {
-  const page = Number(searchParams.page) || 1;
-  const result = await getShopProducts({
-    q: searchParams.q,
-    category: searchParams.category,
-    sort: searchParams.sort,
-    page,
-    page_size: PAGE_SIZE,
-  });
+function ShopContent() {
+  const router = useRouter();
+  const params = useSearchParams();
 
-  const totalPages = Math.max(1, Math.ceil(result.total / result.page_size));
+  const [all, setAll] = useState<UIProduct[]>([]);
+  const [online, setOnline] = useState(true);
+  const [error, setError] = useState<string | undefined>();
+  const [loading, setLoading] = useState(true);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    safeGetCatalog().then((res) => {
+      setAll(res.products);
+      setOnline(res.online);
+      setError(res.error);
+      setLoading(false);
+    });
+  }, []);
+
+  const filters: FilterState = useMemo(
+    () => ({
+      q: params.get("q") || undefined,
+      category: params.get("category") || undefined,
+      gender: params.get("gender") || undefined,
+      articleType: params.get("articleType") || undefined,
+      color: params.get("color") || undefined,
+      usage: params.get("usage") || undefined,
+      season: params.get("season") || undefined,
+      sort: (params.get("sort") as FilterState["sort"]) || "featured",
+      maxPrice: params.get("maxPrice") ? Number(params.get("maxPrice")) : undefined,
+    }),
+    [params]
+  );
+
+  const facets = useMemo(() => deriveFacets(all), [all]);
+  const onSaleOnly = params.get("onSale") === "1";
+  let filtered = useMemo(() => filterCatalog(all, filters), [all, filters]);
+  if (onSaleOnly) filtered = filtered.filter((p) => p.discountPct > 0);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => setPage(1), [filters, onSaleOnly]);
+
+  function updateFilters(next: FilterState) {
+    const qs = new URLSearchParams();
+    Object.entries(next).forEach(([k, v]) => {
+      if (v !== undefined && v !== "" && v !== "featured") qs.set(k, String(v));
+    });
+    router.push(`/shop${qs.toString() ? `?${qs.toString()}` : ""}`);
+  }
 
   return (
-    <>
-      {result.source === "fallback" && <BackendOfflineBanner error={result.error} />}
-
-      <div className="flex flex-col lg:flex-row lg:justify-between">
-        <div className="flex items-center justify-between">
-          <h1 className="font-bold text-2xl md:text-[32px] capitalize">
-            {searchParams.category || "All Products"}
+    <main className="max-w-frame mx-auto px-4 xl:px-0 py-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-display text-3xl font-bold">
+            {filters.q ? `Results for “${filters.q}”` : "All products"}
           </h1>
-          <MobileFilters />
+          <p className="text-sm text-ink/50 mt-1">{filtered.length} products</p>
         </div>
-        <div className="flex flex-col sm:items-center sm:flex-row">
-          <span className="text-sm md:text-base text-black/60 mr-3">
-            {result.total === 0
-              ? "No products found"
-              : `Showing ${(page - 1) * result.page_size + 1}-${Math.min(
-                  page * result.page_size,
-                  result.total
-                )} of ${result.total} Products`}
-          </span>
-          <ShopSortSelect currentSort={searchParams.sort} />
+        <div className="flex items-center gap-3">
+          <button
+            className="lg:hidden flex items-center gap-1 text-sm border border-line rounded-full px-3 py-1.5"
+            onClick={() => setMobileFiltersOpen(true)}
+          >
+            <SlidersHorizontal size={14} /> Filters
+          </button>
+          <select
+            value={filters.sort}
+            onChange={(e) => updateFilters({ ...filters, sort: e.target.value as FilterState["sort"] })}
+            className="text-sm border border-line rounded-full px-3 py-1.5 bg-white"
+          >
+            <option value="featured">Featured</option>
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price: low to high</option>
+            <option value="price_desc">Price: high to low</option>
+            <option value="rating">Top rated</option>
+          </select>
         </div>
       </div>
 
-      {result.products.length === 0 ? (
-        <div className="w-full py-20 text-center border border-dashed border-black/10 rounded-2xl">
-          <p className="text-lg font-semibold text-black/70">
-            No products match your search.
-          </p>
-          <p className="text-sm text-black/50 mt-1">
-            Try a different keyword or clear your filters.
-          </p>
-        </div>
-      ) : (
-        <div className="w-full grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
-          {result.products.map((product) => (
-            <ProductCard key={product.id} data={product} />
-          ))}
-        </div>
-      )}
+      {!online && <OfflineBanner error={error} />}
 
-      <hr className="border-t-black/10" />
-      <ShopPagination currentPage={page} totalPages={totalPages} />
-    </>
-  );
-}
-
-export default function ShopPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; category?: string; sort?: string; page?: string };
-}) {
-  return (
-    <main className="pb-20">
-      <div className="max-w-frame mx-auto px-4 xl:px-0">
-        <hr className="h-[1px] border-t-black/10 mb-5 sm:mb-6" />
-        <BreadcrumbShop />
-        <div className="mb-5">
-          <ShopSearchBar initialQuery={searchParams.q} />
+      <div className="flex gap-10">
+        <div className="hidden lg:block">
+          <Filters facets={facets} value={filters} onChange={updateFilters} onClear={() => router.push("/shop")} />
         </div>
-        <div className="flex md:space-x-5 items-start">
-          <div className="hidden md:block min-w-[295px] max-w-[295px] border border-black/10 rounded-[20px] px-5 md:px-6 py-5 space-y-5 md:space-y-6">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-black text-xl">Filters</span>
-              <FiSliders className="text-2xl text-black/40" />
+
+        {mobileFiltersOpen && (
+          <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileFiltersOpen(false)}>
+            <div
+              className="absolute right-0 top-0 h-full w-80 max-w-[85vw] bg-canvas p-5 overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button className="mb-4" onClick={() => setMobileFiltersOpen(false)}>
+                <X size={20} />
+              </button>
+              <Filters facets={facets} value={filters} onChange={updateFilters} onClear={() => router.push("/shop")} />
             </div>
-            <Filters />
           </div>
-          <div className="flex flex-col w-full space-y-5">
-            <Suspense fallback={<ProductGridSkeleton title="Loading products…" count={9} />}>
-              <ShopResults searchParams={searchParams as ShopQuery} />
-            </Suspense>
-          </div>
+        )}
+
+        <div className="flex-1">
+          {loading ? (
+            <ProductGridSkeleton count={12} />
+          ) : filtered.length === 0 && filters.q ? (
+            <div className="text-center py-16 border border-dashed border-line rounded-2xl">
+              <p className="text-ink/50 mb-4">
+                No products match &ldquo;{filters.q}&rdquo; in the catalog.
+              </p>
+              <button
+                onClick={() => askAI(`Find me: ${filters.q}`)}
+                className="inline-flex items-center gap-2 bg-ink text-white rounded-full px-5 py-2.5 text-sm font-medium hover:bg-ink/85 transition-colors"
+              >
+                <Sparkles size={14} /> Ask AI to find something like this
+              </button>
+            </div>
+          ) : (
+            <>
+              <ProductGrid products={pageItems} />
+              {totalPages > 1 && (
+                <div className="flex justify-center gap-2 mt-10">
+                  {Array.from({ length: totalPages }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPage(i + 1)}
+                      className={`w-9 h-9 rounded-full text-sm ${
+                        page === i + 1 ? "bg-ink text-white" : "bg-white border border-line"
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ShopPage() {
+  return (
+    <Suspense fallback={<ProductGridSkeleton count={12} />}>
+      <ShopContent />
+    </Suspense>
   );
 }

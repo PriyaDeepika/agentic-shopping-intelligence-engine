@@ -1,58 +1,21 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 
-import {
-  KeyframeOptions,
-  animate,
-  useInView,
-  useIsomorphicLayoutEffect,
-} from "framer-motion";
-import { useRef } from "react";
+export default function AnimatedCounter({ to, duration = 1.2 }: { to: number; duration?: number }) {
+  const [value, setValue] = useState(0);
+  const start = useRef<number | null>(null);
 
-type AnimatedCounterProps = {
-  from: number;
-  to: number;
-  animationOptions?: KeyframeOptions;
-};
-
-const AnimatedCounter = ({
-  from,
-  to,
-  animationOptions,
-}: AnimatedCounterProps) => {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true });
-
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-
-    if (!element) return;
-    if (!inView) return;
-
-    // Set initial value
-    element.textContent = String(from);
-
-    // If reduced motion is enabled in system's preferences
-    if (window.matchMedia("(prefers-reduced-motion)").matches) {
-      element.textContent = String(to);
-      return;
+  useEffect(() => {
+    let raf: number;
+    function tick(ts: number) {
+      if (start.current === null) start.current = ts;
+      const progress = Math.min((ts - start.current) / (duration * 1000), 1);
+      setValue(Math.round(progress * to));
+      if (progress < 1) raf = requestAnimationFrame(tick);
     }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, duration]);
 
-    const controls = animate(from, to, {
-      duration: 6,
-      ease: "easeOut",
-      ...animationOptions,
-      onUpdate(value) {
-        element.textContent = Number(value.toFixed(0)).toLocaleString();
-      },
-    });
-
-    // Cancel on unmount
-    return () => {
-      controls.stop();
-    };
-  }, [ref, inView, from, to]);
-
-  return <span ref={ref} />;
-};
-
-export default AnimatedCounter;
+  return <>{value.toLocaleString()}</>;
+}
