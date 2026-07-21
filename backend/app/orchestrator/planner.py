@@ -26,10 +26,20 @@ and any owned_items mentioned. Return strict JSON:
  "occasion": "<string|null>", "owned_items": ["..."], "deadline": "<string|null>"}
 """
 
-_BUDGET_RE = re.compile(
-    r"(?:₹|rs\.?|inr)\s?([\d,]+)"
-    r"|([\d,]+)\s?(?:rupees|rs\.?)"
-    r"|budget(?:\s+of)?\s*(?:is|:)?\s*(?:₹|rs\.?|inr)?\s*([\d,]+)",
+# Budget extraction is split into two independent passes rather than one
+# monolithic regex, because a single pattern can't reliably cover both
+# "₹2000" (currency-adjacent) and "under 2000" / "below 3000" / "max 5000"
+# (operator-adjacent, no currency symbol at all) at once — the previous
+# single-pattern version silently returned no budget for the latter, which
+# meant the budget constraint was dropped instead of respected.
+_CURRENCY = r"(?:₹|rs\.?|inr|rupees?)"
+_AMOUNT = r"([\d][\d,]*(?:\.\d+)?)"
+_AMOUNT_WITH_CURRENCY_RE = re.compile(
+    rf"(?:{_CURRENCY}\s*{_AMOUNT})|(?:{_AMOUNT}\s*{_CURRENCY})", re.IGNORECASE
+)
+_BARE_AMOUNT_RE = re.compile(_AMOUNT)
+_BUDGET_OPERATOR_RE = re.compile(
+    r"\bunder\b|\bbelow\b|\bmax(?:imum)?\b|\bup\s*to\b|\bless\s+than\b|\bwithin\b|\bbudget(?:\s+of)?\s*(?:is|:)?\b",
     re.IGNORECASE,
 )
 _AESTHETIC_KEYWORDS = [
@@ -37,6 +47,31 @@ _AESTHETIC_KEYWORDS = [
 ]
 _MODIFY_KEYWORDS = ["remove", "replace", "swap", "delete", "add more", "increase", "decrease"]
 _BUDGET_ADJUST_KEYWORDS = ["reduce budget", "increase budget", "lower budget", "raise budget", "change budget"]
+
+
+def _extract_budget(message: str) -> float | None:
+    """
+    Handles both orderings of currency + amount ("₹2000"/"2000 rupees") and,
+    when an operator keyword is present but no currency symbol is ("under
+    2000", "budget is 2500"), falls back to the first bare number in the
+    message. Without this fallback, "under 2000" parsed to no budget at all.
+    """
+    match = _AMOUNT_WITH_CURRENCY_RE.search(message)
+    if match:
+        raw = (match.group(1) or match.group(2) or "").replace(",", "")
+        if raw:
+            try:
+                return float(raw)
+            except ValueError:
+                pass
+    if _BUDGET_OPERATOR_RE.search(message):
+        bare = _BARE_AMOUNT_RE.search(message)
+        if bare:
+            try:
+                return float(bare.group(1).replace(",", ""))
+            except ValueError:
+                pass
+    return None
 
 
 async def classify_and_extract(message: str, prior_state: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -58,13 +93,7 @@ async def classify_and_extract(message: str, prior_state: dict[str, Any] | None 
         "deadline": None,
     }
 
-    budget_match = _BUDGET_RE.search(message)
-    if budget_match:
-        raw = (
-            budget_match.group(1) or budget_match.group(2) or budget_match.group(3) or ""
-        ).replace(",", "")
-        if raw.isdigit():
-            result["budget"] = float(raw)
+    result["budget"] = _extract_budget(message)
 
     for kw in _AESTHETIC_KEYWORDS:
         if kw in lower:

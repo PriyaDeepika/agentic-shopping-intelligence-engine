@@ -124,15 +124,39 @@ async def merge_node(state: ShoppingState) -> dict[str, Any]:
     outfits = state.get("outfits", [])
     errors = state.get("errors", [])
 
-    if outfits:
-        reply = f"I've put together {len(outfits)} outfit(s) for you, totaling ₹{cart.get('total', 0):.0f}."
-    elif cart.get("items"):
-        reply = f"Your cart is updated — {len(cart['items'])} item(s), total ₹{cart.get('total', 0):.0f}."
-    else:
-        reply = "Here are the products I found for you."
+    items = cart.get("items", [])
+    total = cart.get("total", 0.0)
+    budget = cart.get("budget")
 
-    if cart.get("over_budget"):
-        reply += " Note: this is still slightly over your budget — I can trim further if you'd like."
+    # The reply text is built entirely from numbers already computed by
+    # CartAgent/BudgetAgent (never re-derived or guessed here) so it can
+    # never disagree with the cart the person actually sees. Terminology
+    # ("outfit(s)" vs "product(s)") is likewise decided from real data: an
+    # "outfit" only counts if it actually groups more than one coordinated
+    # product — a single-piece "outfit" is really just one recommendation.
+    if not items:
+        reply = "I couldn't find any products matching that — try loosening your budget, color, or category."
+    elif state.get("delta_only"):
+        reply = f"Your cart is updated — {len(items)} item(s), total ₹{total:.0f}."
+    else:
+        coordinated_outfits = [o for o in outfits if len(o.get("product_ids", [])) > 1]
+        if coordinated_outfits:
+            n = len(coordinated_outfits)
+            reply = f"I put together {n} outfit{'s' if n != 1 else ''} for you, totaling ₹{total:.0f}."
+        else:
+            n = len(items)
+            reply = f"I found {n} product{'s' if n != 1 else ''} for you, totaling ₹{total:.0f}."
+
+    if items and budget is not None:
+        gap = round(total - budget, 2)
+        if gap <= 0:
+            reply += f" This stays within your ₹{budget:.0f} budget."
+        else:
+            reply += (
+                f" This is ₹{gap:.0f} above your ₹{budget:.0f} budget — the closest match "
+                f"available in the catalog, since there weren't enough matching products under ₹{budget:.0f}."
+            )
+
     if errors:
         reply += f" ({len(errors)} agent(s) hit issues; see the debug endpoint for details.)"
 
