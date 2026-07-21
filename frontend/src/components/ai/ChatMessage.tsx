@@ -25,7 +25,10 @@ export default function ChatMessage({ message }: { message: ChatMessageT }) {
       </div>
 
       {message.products && message.products.length > 0 && (
-        <div className="mt-2 -mx-1 flex gap-3 overflow-x-auto pb-1 max-w-full px-1">
+        <div
+          className="mt-2 grid gap-2.5 w-full"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))" }}
+        >
           {message.products.map((item) => (
             <ProductSuggestion
               key={item.product.id}

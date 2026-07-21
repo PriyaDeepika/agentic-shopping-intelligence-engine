@@ -84,7 +84,7 @@ export default function ChatDrawer({
             transition={{ duration: 0.18 }}
             className="flex flex-col flex-1 min-h-0"
           >
-            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
               {messages.map((m) => (
                 <ChatMessage key={m.id} message={m} />
               ))}
